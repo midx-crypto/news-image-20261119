@@ -1,37 +1,52 @@
-"""Entrypoint: build entry.png (stdlib only; drawing lives in build.py)."""
+#!/usr/bin/env python3
+"""news-image-20261119: entry point.
+
+The entry is one pre-rendered front page, entry.png (1024x1024),
+drawn once by build.py. This program only copies that file into the
+output directory, byte for byte.
+
+Standard library only: the grading image is a plain python:3.13
+image with no third-party packages, no network, and a read-only
+repository, so nothing here imports beyond the stdlib and nothing is
+re-rendered at grade time. The output is always named entry.png.
+Two runs write the same bytes.
+"""
+import hashlib
 import os
+import shutil
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+HERE = os.path.dirname(os.path.abspath(__file__))
+SOURCE = os.path.join(HERE, "entry.png")
+LIMIT = 1024 * 1024
 
-import build
+
+def _sha256(path):
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 def main():
-    out_dir = os.environ.get("MAKEFUN_OUTPUT_DIR", "")
-    if out_dir:
-        out = os.path.join(out_dir, "entry.png")
-    else:
-        out = os.path.join(os.path.dirname(os.path.abspath(__file__)), "entry.png")
-    build.build(out)
-    # Validation: file exists, PNG magic, size <= 1 MiB, dimensions <= 1024x1024.
-    if not os.path.isfile(out):
-        raise SystemExit("missing output: " + out)
-    size = os.path.getsize(out)
-    if size > 1048576:
-        raise SystemExit("entry.png too large: %d bytes" % size)
-    with open(out, "rb") as fh:
-        head = fh.read(8)
-    if head != b"\x89PNG\r\n\x1a\n":
-        raise SystemExit("entry.png is not a PNG")
-    import struct
-    with open(out, "rb") as fh:
-        fh.seek(16)
-        w, h = struct.unpack(">II", fh.read(8))
-    if w > 1024 or h > 1024:
-        raise SystemExit("entry.png too big: %dx%d" % (w, h))
-    print("wrote %s (%d bytes, %dx%d)" % (out, size, w, h))
+    if not os.path.isfile(SOURCE):
+        print("missing entry.png next to main.py", file=sys.stderr)
+        return 1
+    if os.path.getsize(SOURCE) > LIMIT:
+        print("entry.png exceeds the 1 MiB limit", file=sys.stderr)
+        return 1
+    target_dir = os.environ.get("MAKEFUN_OUTPUT_DIR", "/output")
+    os.makedirs(target_dir, exist_ok=True)
+    target = os.path.join(target_dir, "entry.png")
+    want = _sha256(SOURCE)
+    shutil.copyfile(SOURCE, target)
+    if _sha256(target) != want:
+        print("copied file failed its integrity check", file=sys.stderr)
+        return 1
+    print("wrote %s (%d bytes, sha256 %s)" % (target, os.path.getsize(target), want))
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
