@@ -1,27 +1,23 @@
 #!/usr/bin/env python3
-"""news-image-20261119: entry point.
+"""Entry program for make.fun bounty news-image-20261119 (round 3).
 
-The entry is one pre-rendered front page, entry.png (1024x1024),
-drawn once by build.py. This program only copies that file into the
-output directory, byte for byte.
+The entry image (entry.png, 1024x1024, drawn in code with Pillow by
+build.py) is shipped in this repository. This program copies it
+byte-for-byte to the output path given as the first command-line
+argument, then verifies the copy's SHA-256 against the known hash.
 
-Standard library only: the grading image is a plain python:3.13
-image with no third-party packages, no network, and a read-only
-repository, so nothing here imports beyond the stdlib and nothing is
-re-rendered at grade time. The output is always named entry.png.
-Two runs write the same bytes.
+Standard library only: hashlib, os, shutil, sys.
 """
 import hashlib
 import os
 import shutil
 import sys
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-SOURCE = os.path.join(HERE, "entry.png")
-LIMIT = 1024 * 1024
+SOURCE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "entry.png")
+EXPECTED_SHA256 = "e30d77f09bbd7225678e9bc86ed0e8a93ce2c53dfeb7ba419b0774adaa72fa7a"
 
 
-def _sha256(path):
+def sha256_of(path):
     h = hashlib.sha256()
     with open(path, "rb") as f:
         for chunk in iter(lambda: f.read(65536), b""):
@@ -29,24 +25,25 @@ def _sha256(path):
     return h.hexdigest()
 
 
-def main():
+def main(argv):
+    if len(argv) != 2:
+        print("usage: python3 main.py <output-path>", file=sys.stderr)
+        return 2
+    out = argv[1]
     if not os.path.isfile(SOURCE):
-        print("missing entry.png next to main.py", file=sys.stderr)
+        print("entry.png not found next to main.py", file=sys.stderr)
         return 1
-    if os.path.getsize(SOURCE) > LIMIT:
-        print("entry.png exceeds the 1 MiB limit", file=sys.stderr)
+    if sha256_of(SOURCE) != EXPECTED_SHA256:
+        print("entry.png hash mismatch; refusing to copy", file=sys.stderr)
         return 1
-    target_dir = os.environ.get("MAKEFUN_OUTPUT_DIR", "/output")
-    os.makedirs(target_dir, exist_ok=True)
-    target = os.path.join(target_dir, "entry.png")
-    want = _sha256(SOURCE)
-    shutil.copyfile(SOURCE, target)
-    if _sha256(target) != want:
-        print("copied file failed its integrity check", file=sys.stderr)
+    os.makedirs(os.path.dirname(os.path.abspath(out)), exist_ok=True)
+    shutil.copyfile(SOURCE, out)
+    if sha256_of(out) != EXPECTED_SHA256:
+        print("output hash mismatch", file=sys.stderr)
         return 1
-    print("wrote %s (%d bytes, sha256 %s)" % (target, os.path.getsize(target), want))
+    print("wrote %s (sha256 %s)" % (out, EXPECTED_SHA256))
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    raise SystemExit(main(sys.argv))
